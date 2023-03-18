@@ -419,7 +419,9 @@ struct ristreceiver_flow_cumulative_stats {
 struct ristreceiver_flow_cumulative_stats *stats_list;
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
+#if HAVE_CJSON
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
+#endif
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
 	{
 		struct ristreceiver_flow_cumulative_stats *stats = stats_list;

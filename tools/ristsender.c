@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-
+#include "config.h"
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
 #include <stdint.h>
@@ -424,7 +424,9 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container)
 {
+#if HAVE_CJSON
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+#endif
 #if HAVE_PROMETHEUS_SUPPORT
 	if (prom_stats_ctx != NULL)
 		rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uint64_t)arg);

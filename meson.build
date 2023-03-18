@@ -42,9 +42,12 @@ inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
 
 #builtin_lz4 = get_option('builtin_lz4')
+disable_json = get_option('disable_json')
 builtin_cjson = get_option('builtin_cjson')
+external_cjson = get_option('external_cjson')
 builtin_mbedtls = get_option('builtin_mbedtls')
 use_mbedtls = get_option('use_mbedtls')
+build_tools = get_option('built_tools')
 cdata.set10('ALLOW_INSECURE_IV_FALLBACK', get_option('allow_insecure_iv_fallback'))
 
 required_library = false
@@ -59,6 +62,18 @@ endif
 
 have_pthreads = cc.has_header('pthread.h')
 have_clock_gettime = false
+
+if builtin_cjson and external_cjson
+	error('builtin_cjson and external_cjson cannot both be true')
+endif
+
+if get_option('default_library') != 'static' and external_cjson
+	error('external_cjson can only be used with static library output')
+endif
+
+if external_cjson and build_tools
+	error('external cJSON is incompatible with building tools')
+endif
 
 threads = []
 test_args = []
@@ -164,22 +179,49 @@ if not cc.check_header('stdatomic.h')
     endif
 endif
 
-#On ubuntu cjson does not come with pkgconfig files, hence the extended checking.
-if not builtin_cjson
-	cjson_lib = dependency('libcjson', required: false)
-	if not cjson_lib.found()
-		cjson_lib = cc.find_library('cjson', required: required_library, has_headers: ['cjson/cJSON.h'])
+cjson_lib = []
+if not disable_json
+	cdata.set10('HAVE_CJSON', 1)
+	#On ubuntu cjson does not come with pkgconfig files, hence the extended checking.
+	if not builtin_cjson
+		cjson_lib = dependency('libcjson', required: false)
 		if not cjson_lib.found()
-			builtin_cjson = true
+			cjson_lib = cc.find_library('cjson', required: required_library, has_headers: ['cjson/cJSON.h'])
+			if not cjson_lib.found()
+				builtin_cjson = true
+			endif
+		else
+			deps += cjson_lib
 		endif
 	endif
+	if builtin_cjson
+		message('Using builtin cJSON library')
+		cjson_lib = declare_dependency( compile_args : '-DCJSON_HIDE_SYMBOLS',
+										sources: 'contrib/contrib_cJSON/cjson/cJSON.c',
+										include_directories : include_directories('contrib/contrib_cJSON'))
+		deps += cjson_lib
+	elif external_cjson
+		inc += include_directories('contrib/contrib_cJSON')
+	endif
+else
+	cdata.set10('HAVE_CJSON', 0)
 endif
-if builtin_cjson
-	message('Using builtin cJSON library')
-	cjson_lib = declare_dependency( compile_args : '-DCJSON_HIDE_SYMBOLS',
-									sources: 'contrib/contrib_cJSON/cjson/cJSON.c',
-									include_directories : include_directories('contrib/contrib_cJSON'))
-endif
+
+#if not builtin_lz4
+#	lz4_lib = dependency('liblz4', required: required_library)
+#	if not lz4_lib.found()
+#		builtin_lz4 = true
+#	endif
+#endif
+#if builtin_lz4
+#	message('Using builtin lz4 library')
+#	lz4_lib = declare_dependency( compile_args : [ '-DLZ4LIB_VISIBILITY=',  '-DLZ4FLIB_API='],
+#								  sources: ['contrib/lz4/lz4.c',
+#											'contrib/lz4/lz4frame.c',
+#											'contrib/lz4/lz4hc.c',
+#											'contrib/lz4/xxhash.c',],
+#								  include_directories: include_directories('contrib/lz4'))
+#endif
 
 if get_option('use_tun')
 	if host_machine.system() == 'linux' and cc.check_header('linux/if_tun.h')
@@ -240,6 +282,7 @@ librist = library('librist',
 		deps,
 		stdatomic_dependency,
 		cjson_lib,
+#		lz4_lib
 	],
 	name_prefix : '',
 	version: librist_version,
